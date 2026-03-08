@@ -149,7 +149,7 @@ for (var i = 0; i < clients.length; i++) {
     let run_result = std::process::Command::new("qdbus")
         .args([
             "org.kde.KWin",
-            &format!("/{}", script_id),
+            &format!("/Scripting/Script{}", script_id),
             "org.kde.kwin.Script.run",
         ])
         .output();
