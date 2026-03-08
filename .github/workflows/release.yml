@@ -8,25 +8,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
+permissions:
+  contents: write
 
+jobs:
   build-release:
-    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -69,18 +55,13 @@ jobs:
         cp README.md dist/ 2>/dev/null || true
         tar czf ${{ matrix.name }}.tar.gz -C dist .
 
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.name }}.tar.gz
-        asset_name: ${{ matrix.name }}.tar.gz
-        asset_content_type: application/gzip
+        name: ${{ matrix.name }}
+        path: ${{ matrix.name }}.tar.gz
 
   build-rpm:
-    needs: create-release
     runs-on: ubuntu-latest
     
     steps:
@@ -114,24 +95,18 @@ jobs:
     - name: Build RPM
       run: cargo generate-rpm
 
-    - name: Find RPM file
-      id: find_rpm
+    - name: Rename RPM
       run: |
         RPM_FILE=$(find ./target/generate-rpm -name "*.rpm" | head -n 1)
-        echo "rpm_file=$RPM_FILE" >> $GITHUB_OUTPUT
+        cp "$RPM_FILE" krabby-${{ github.ref_name }}-1.x86_64.rpm
 
-    - name: Upload RPM Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ${{ steps.find_rpm.outputs.rpm_file }}
-        asset_name: krabby-${{ github.ref_name }}-1.x86_64.rpm
-        asset_content_type: application/x-rpm
+        name: krabby-rpm
+        path: krabby-${{ github.ref_name }}-1.x86_64.rpm
 
   build-deb:
-    needs: create-release
     runs-on: ubuntu-latest
     
     steps:
@@ -165,18 +140,39 @@ jobs:
     - name: Build DEB
       run: cargo deb
 
-    - name: Find DEB file
-      id: find_deb
+    - name: Rename DEB
       run: |
         DEB_FILE=$(find ./target/debian -name "*.deb" | head -n 1)
-        echo "deb_file=$DEB_FILE" >> $GITHUB_OUTPUT
+        cp "$DEB_FILE" krabby-${{ github.ref_name }}-1_amd64.deb
 
-    - name: Upload DEB Release Asset
-      uses: actions/upload-release-asset@v1
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: krabby-deb
+        path: krabby-${{ github.ref_name }}-1_amd64.deb
+
+  create-release:
+    needs: [build-release, build-rpm, build-deb]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+
+    - name: List artifacts
+      run: ls -la artifacts/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        files: artifacts/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ${{ steps.find_deb.outputs.deb_file }}
-        asset_name: krabby-${{ github.ref_name }}-1_amd64.deb
-        asset_content_type: application/vnd.debian.binary-package
