@@ -1,210 +1,276 @@
 use iced::{
-    widget::{button, container, row, text, Button, Container, Row},
-    Alignment, Background, Border, Color, Element, Length, Theme,
+    widget,
+    Alignment, Element, Length, Theme,
 };
 
 use crate::docker::{ContainerInfo, ContainerState};
 use crate::ui::theme::AppTheme;
+use crate::ui::app::Message;
 
-pub fn styled_button<'a, Message>(
-    label: &'a str,
-    theme: &'a AppTheme,
-) -> Button<'a, Message, Theme>
-where
-    Message: std::clone::Clone + 'static,
-{
-    button(text(label).size(14))
-        .padding([8, 16])
-        .style(move |_t, _s| theme.button_style())
-}
-
-pub fn styled_button_secondary<'a, Message>(
-    label: &'a str,
-    theme: &'a AppTheme,
-) -> Button<'a, Message, Theme>
-where
-    Message: std::clone::Clone + 'static,
-{
-    button(text(label).size(14))
-        .padding([8, 16])
-        .style(move |_t, _s| theme.button_secondary_style())
-}
-
-pub fn card<'a, Message>(content: impl Into<Element<'a, Message, Theme>>) -> Container<'a, Message, Theme>
-where
-    Message: std::clone::Clone + 'a + 'static,
-{
-    container(content)
-        .padding(16)
-        .style(|_t| {
-            iced::widget::container::Style {
-                background: Some(Background::Color(Color::from_rgb8(30, 30, 60))),
-                border: Border {
-                    radius: 12.0.into(),
-                    width: 1.0,
-                    color: Color::from_rgb8(124, 58, 237).scale_alpha(0.2),
-                },
-                ..Default::default()
-            }
-        })
-}
-
-pub fn state_badge<Message>(state: ContainerState, theme: &AppTheme) -> Element<'static, Message, Theme>
-where
-    Message: std::clone::Clone + 'static,
-{
-    let (bg_color, text_color, label) = match state {
-        ContainerState::Running => (theme.success.scale_alpha(0.2), theme.success, "Running"),
-        ContainerState::Paused => (theme.warning.scale_alpha(0.2), theme.warning, "Paused"),
-        ContainerState::Restarting => (theme.primary.scale_alpha(0.2), theme.primary, "Restarting"),
-        ContainerState::Exited => (theme.error.scale_alpha(0.2), theme.text_muted, "Stopped"),
-        ContainerState::Dead => (theme.error.scale_alpha(0.2), theme.error, "Dead"),
-        ContainerState::Created => (theme.secondary.scale_alpha(0.2), theme.secondary, "Created"),
-        ContainerState::Unknown => (Color::from_rgb8(100, 100, 100), theme.text_muted, "Unknown"),
-    };
+/// Stats row showing running/stopped/total counts
+pub fn stats_row(running: usize, stopped: usize, total: usize, theme: &AppTheme) -> Element<'_, Message> {
+    let running_badge = stat_badge("Running", running, theme.success, theme);
+    let stopped_badge = stat_badge("Stopped", stopped, theme.warning, theme);
+    let total_badge = stat_badge("Total", total, theme.primary, theme);
     
-    container(text(label).size(11).color(text_color))
-        .padding([4, 10])
-        .style(move |_t| {
-            iced::widget::container::Style {
-                background: Some(Background::Color(bg_color)),
-                border: Border {
-                    radius: 20.0.into(),
-                    width: 0.0,
-                    color: Color::TRANSPARENT,
-                },
-                ..Default::default()
-            }
-        })
+    widget::row![running_badge, stopped_badge, total_badge]
+        .spacing(12)
         .into()
 }
 
-pub fn header_row<Message>(theme: &AppTheme) -> Row<'static, Message, Theme>
-where
-    Message: std::clone::Clone + 'static,
-{
-    row![
-        text("Name").size(12).color(theme.text_muted).width(Length::FillPortion(2)),
-        text("Image").size(12).color(theme.text_muted).width(Length::FillPortion(2)),
-        text("State").size(12).color(theme.text_muted).width(Length::FillPortion(1)),
-        text("Status").size(12).color(theme.text_muted).width(Length::FillPortion(2)),
-        text("Ports").size(12).color(theme.text_muted).width(Length::FillPortion(2)),
-        text("Actions").size(12).color(theme.text_muted).width(Length::Shrink),
-    ]
-    .spacing(12)
-    .padding([8, 16])
-    .align_y(Alignment::Center)
-}
-
-pub fn container_row<'a, Message>(
-    container_info: &'a ContainerInfo,
-    theme: &'a AppTheme,
-    on_start: Message,
-    on_stop: Message,
-    on_restart: Message,
-    on_remove: Message,
-) -> Container<'a, Message, Theme>
-where
-    Message: std::clone::Clone + 'a + 'static,
-{
-    let is_running = container_info.state == ContainerState::Running;
-    
-    let content = row![
-        text(&container_info.name)
-            .size(13)
-            .color(theme.text)
-            .width(Length::FillPortion(2)),
-        text(&container_info.image)
-            .size(12)
-            .color(theme.text_muted)
-            .width(Length::FillPortion(2)),
-        Element::from(container(state_badge::<Message>(container_info.state.clone(), theme))
-            .width(Length::FillPortion(1))) ,
-        text(&container_info.status)
-            .size(12)
-            .color(theme.text_muted)
-            .width(Length::FillPortion(2)),
-        text(format_ports(&container_info.ports))
-            .size(11)
-            .color(theme.text_muted)
-            .width(Length::FillPortion(2)),
-        row![
-            if is_running {
-                styled_button_secondary("Stop", theme).on_press(on_stop)
-            } else {
-                styled_button("Start", theme).on_press(on_start)
-            },
-            styled_button_secondary("Restart", theme).on_press(on_restart),
-            styled_button_secondary("Remove", theme).on_press(on_remove),
+fn stat_badge<'a>(label: &'a str, value: usize, color: iced::Color, theme: &'a AppTheme) -> Element<'a, Message> {
+    widget::container(
+        widget::row![
+            widget::text(format!("{}", value))
+                .size(16)
+                .color(color)
+                .font(iced::Font::DEFAULT),
+            widget::text(label)
+                .size(11)
+                .color(theme.text_muted),
         ]
-        .spacing(8)
-        .width(Length::Shrink),
-    ]
-    .spacing(12)
-    .padding([12, 16])
-    .align_y(Alignment::Center);
-    
-    container(content)
-        .style(move |_t| {
-            iced::widget::container::Style {
-                background: Some(Background::Color(theme.surface)),
-                border: Border {
-                    radius: 8.0.into(),
-                    width: 1.0,
-                    color: Color::TRANSPARENT,
-                },
-                ..Default::default()
-            }
-        })
-}
-
-fn format_ports(ports: &[crate::docker::PortMapping]) -> String {
-    if ports.is_empty() {
-        return "-".to_string();
-    }
-    
-    ports.iter()
-        .map(|p| {
-            if let Some(public) = p.public_port {
-                format!("{}:{}", public, p.private_port)
-            } else {
-                format!("{}", p.private_port)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-pub fn stats_badge<Message>(
-    label: String, 
-    value: String, 
-    background: Color,
-    primary: Color,
-    text_color: Color,
-    text_muted: Color,
-) -> Element<'static, Message, Theme>
-where
-    Message: std::clone::Clone + 'static,
-{
-    container(
-        iced::widget::column![
-            text(label.clone()).size(10).color(text_muted),
-            text(value).size(14).color(text_color).font(iced::Font::MONOSPACE),
-        ]
-        .spacing(4)
-        .align_x(Alignment::Center)
+        .spacing(6)
+        .align_y(Alignment::Center)
     )
-    .padding([12, 20])
-    .style(move |_t| {
+    .padding([6, 12])
+    .style(move |_t: &Theme| {
         iced::widget::container::Style {
-            background: Some(Background::Color(background)),
-            border: Border {
-                radius: 8.0.into(),
+            background: Some(iced::Background::Color(theme.surface)),
+            border: iced::Border {
+                radius: 6.0.into(),
                 width: 1.0,
-                color: primary.scale_alpha(0.2),
+                color: theme.border,
             },
             ..Default::default()
         }
     })
     .into()
+}
+
+/// Table header row
+pub fn table_header(theme: &AppTheme) -> Element<'_, Message> {
+    widget::container(
+        widget::row![
+            widget::text("Name").size(12).color(theme.text_muted).width(Length::FillPortion(3)),
+            widget::text("Image").size(12).color(theme.text_muted).width(Length::FillPortion(3)),
+            widget::text("Status").size(12).color(theme.text_muted).width(Length::FillPortion(2)),
+            widget::text("Ports").size(12).color(theme.text_muted).width(Length::FillPortion(2)),
+            widget::text("Actions").size(12).color(theme.text_muted).width(Length::Fixed(200.0)),
+        ]
+        .spacing(12)
+        .padding([8, 12])
+    )
+    .style(move |_t: &Theme| {
+        iced::widget::container::Style {
+            background: Some(iced::Background::Color(theme.surface)),
+            border: iced::Border {
+                radius: iced::border::top(6.0),
+                width: 0.0,
+                color: theme.border,
+            },
+            ..Default::default()
+        }
+    })
+    .into()
+}
+
+/// Container row with sleek design
+pub fn container_row<'a>(
+    container: &'a ContainerInfo,
+    theme: &'a AppTheme,
+    on_start: Message,
+    on_stop: Message,
+    on_restart: Message,
+    on_remove: Message,
+    on_logs: Message,
+) -> Element<'a, Message> {
+    let status_color = match container.state {
+        ContainerState::Running => theme.success,
+        ContainerState::Exited | ContainerState::Dead => theme.error,
+        _ => theme.warning,
+    };
+    
+    let status_dot = widget::text("●").color(status_color).size(10);
+    
+    let name = widget::column![
+        widget::text(&container.name).size(13).color(theme.text),
+        widget::text(&container.short_id).size(10).color(theme.text_muted),
+    ]
+    .spacing(2);
+    
+    let image = widget::column![
+        widget::text(truncate(&container.image, 25)).size(12).color(theme.text),
+        widget::text(format!("{}", container.created.format("%Y-%m-%d")))
+            .size(10)
+            .color(theme.text_muted),
+    ]
+    .spacing(2);
+    
+    let status_text = widget::column![
+        widget::row![status_dot, widget::text(&container.status).size(12).color(theme.text)]
+            .spacing(6)
+            .align_y(Alignment::Center),
+    ];
+    
+    let ports_text: Element<_> = if container.ports.is_empty() {
+        widget::text("-").size(11).color(theme.text_muted).into()
+    } else {
+        let port_list: Vec<String> = container.ports.iter()
+            .filter(|p| p.public_port.is_some())
+            .take(2)
+            .map(|p| format!("{}:{}", p.ip.as_deref().unwrap_or("0.0.0.0"), p.public_port.unwrap()))
+            .collect();
+        
+        if port_list.is_empty() {
+            widget::text("-").size(11).color(theme.text_muted).into()
+        } else {
+            let text = if container.ports.len() > 2 {
+                format!("{}, +{}", port_list.join(", "), container.ports.len() - 2)
+            } else {
+                port_list.join(", ")
+            };
+            widget::text(text).size(11).color(theme.text).into()
+        }
+    };
+    
+    // Action buttons based on state
+    let action_buttons: Element<_> = match container.state {
+        ContainerState::Running => {
+            widget::row![
+                icon_button_small("📋", "Logs", theme).on_press(on_logs),
+                icon_button_small("⏸", "Stop", theme).on_press(on_stop),
+                icon_button_small("↻", "Restart", theme).on_press(on_restart),
+            ]
+            .spacing(4)
+            .into()
+        }
+        _ => {
+            widget::row![
+                icon_button_small("📋", "Logs", theme).on_press(on_logs),
+                icon_button_small("▶", "Start", theme).on_press(on_start),
+                icon_button_small("🗑", "Remove", theme).on_press(on_remove),
+            ]
+            .spacing(4)
+            .into()
+        }
+    };
+    
+    widget::container(
+        widget::row![
+            widget::container(name).width(Length::FillPortion(3)),
+            widget::container(image).width(Length::FillPortion(3)),
+            widget::container(status_text).width(Length::FillPortion(2)),
+            widget::container(ports_text).width(Length::FillPortion(2)),
+            widget::container(action_buttons).width(Length::Fixed(200.0)),
+        ]
+        .spacing(12)
+        .align_y(Alignment::Center)
+        .padding([10, 12])
+    )
+    .style(move |_t: &Theme| {
+        iced::widget::container::Style {
+            background: Some(iced::Background::Color(theme.background)),
+            border: iced::Border {
+                radius: 0.0.into(),
+                width: 0.0,
+                color: theme.border,
+            },
+            ..Default::default()
+        }
+    })
+    .into()
+}
+
+/// Styled button
+pub fn styled_button<'a>(label: &'a str, theme: &'a AppTheme) -> widget::Button<'a, Message> {
+    let base = theme.primary;
+    widget::button(widget::text(label).size(12))
+        .padding([8, 16])
+        .style(move |_t: &Theme, status| {
+            let hover = iced::Color {
+                r: (base.r * 1.2).min(1.0),
+                g: (base.g * 1.2).min(1.0),
+                b: (base.b * 1.2).min(1.0),
+                a: base.a,
+            };
+            let color = match status {
+                iced::widget::button::Status::Hovered => hover,
+                _ => base,
+            };
+            iced::widget::button::Style {
+                background: Some(iced::Background::Color(color)),
+                text_color: iced::Color::WHITE,
+                border: iced::Border {
+                    radius: 6.0.into(),
+                    width: 0.0,
+                    color: iced::Color::TRANSPARENT,
+                },
+                ..Default::default()
+            }
+        })
+}
+
+/// Small icon button for table actions
+pub fn icon_button_small<'a>(icon: &'a str, _tooltip: &'a str, theme: &'a AppTheme) -> widget::Button<'a, Message> {
+    widget::button(
+        widget::text(icon).size(12)
+    )
+    .width(Length::Fixed(32.0))
+    .height(Length::Fixed(28.0))
+    .style(move |_t: &Theme, status| {
+        let base = theme.surface;
+        let hover = theme.surface_hover;
+        let color = match status {
+            iced::widget::button::Status::Hovered => hover,
+            _ => base,
+        };
+        iced::widget::button::Style {
+            background: Some(iced::Background::Color(color)),
+            text_color: theme.text,
+            border: iced::Border {
+                radius: 4.0.into(),
+                width: 1.0,
+                color: theme.border,
+            },
+            ..Default::default()
+        }
+    })
+}
+
+/// Icon button with label for toolbar
+pub fn icon_button<'a>(icon: &'a str, label: &'a str, _theme: &'a AppTheme) -> widget::Button<'a, Message> {
+    widget::button(
+        widget::row![
+            widget::text(icon).size(14),
+            widget::text(label).size(12),
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center)
+    )
+    .padding([8, 14])
+    .style(|_t: &Theme, status| {
+        let base = iced::Color::from_rgb8(60, 60, 70);
+        let color = match status {
+            iced::widget::button::Status::Hovered => iced::Color::from_rgb8(80, 80, 90),
+            _ => base,
+        };
+        iced::widget::button::Style {
+            background: Some(iced::Background::Color(color)),
+            text_color: iced::Color::WHITE,
+            border: iced::Border {
+                radius: 6.0.into(),
+                width: 0.0,
+                color: iced::Color::TRANSPARENT,
+            },
+            ..Default::default()
+        }
+    })
+}
+
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
 }

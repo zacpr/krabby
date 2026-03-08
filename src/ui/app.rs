@@ -37,6 +37,11 @@ pub enum Message {
     ChangeTheme(String),
     ToggleSettings,
     
+    // Logs
+    ViewLogs(String),
+    LogsLoaded(String, String),
+    CloseLogs,
+    
     ShowWindow,
     HideWindow,
     Exit,
@@ -86,6 +91,11 @@ pub struct ContainerManagerApp {
     success_message: Option<String>,
     show_settings: bool,
     last_refresh: std::time::Instant,
+    
+    // Logs modal state
+    logs_container: Option<String>,
+    logs_content: Option<String>,
+    logs_loading: bool,
 }
 
 impl ContainerManagerApp {
@@ -155,6 +165,19 @@ impl ContainerManagerApp {
         )
     }
     
+    fn load_logs(&self, id: String) -> Task<Message> {
+        let docker = self.docker.clone();
+        Task::perform(
+            async move {
+                match docker.get_container_logs(&id, 500).await {
+                    Ok(logs) => Message::LogsLoaded(id, logs),
+                    Err(e) => Message::Error(format!("Failed to load logs: {}", e)),
+                }
+            },
+            |msg| msg,
+        )
+    }
+    
     fn export_csv(&self) -> Task<Message> {
         let containers = self.filtered_containers.clone();
         Task::perform(
@@ -204,7 +227,7 @@ impl ContainerManagerApp {
 
     pub fn new() -> (Self, Task<Message>) {
         let config = AppConfig::load().unwrap_or_default();
-        let theme = AppTheme::midnight(); // TODO: load from config
+        let theme = AppTheme::midnight();
         let docker = DockerClient::new().expect("Failed to connect to Docker");
         
         let app = Self {
@@ -221,6 +244,9 @@ impl ContainerManagerApp {
             success_message: None,
             show_settings: false,
             last_refresh: std::time::Instant::now(),
+            logs_container: None,
+            logs_content: None,
+            logs_loading: false,
         };
         
         (app, Task::perform(async {}, |_| Message::RefreshContainers))
@@ -246,12 +272,12 @@ impl ContainerManagerApp {
             
             Message::Error(msg) => {
                 self.error_message = Some(msg);
+                self.logs_loading = false;
                 Task::none()
             }
             
             Message::ActionCompleted(msg) => {
                 self.success_message = Some(msg);
-                // Refresh after action
                 self.refresh_containers()
             }
             
@@ -308,13 +334,34 @@ impl ContainerManagerApp {
                 Task::none()
             }
             
-            Message::ShowWindow => {
-                // Show and focus window - actual window control happens in main.rs wrapper
+            // Logs handling
+            Message::ViewLogs(id) => {
+                self.logs_container = Some(id.clone());
+                self.logs_content = None;
+                self.logs_loading = true;
+                self.load_logs(id)
+            }
+            
+            Message::LogsLoaded(id, logs) => {
+                if self.logs_container.as_ref() == Some(&id) {
+                    self.logs_content = Some(logs);
+                    self.logs_loading = false;
+                }
                 Task::none()
             }
-            Message::HideWindow => Task::none(), // Handled by tray
+            
+            Message::CloseLogs => {
+                self.logs_container = None;
+                self.logs_content = None;
+                self.logs_loading = false;
+                Task::none()
+            }
+            
+            Message::ShowWindow => {
+                window::get_latest().and_then(|id| window::gain_focus(id))
+            }
+            Message::HideWindow => Task::none(),
             Message::Exit => {
-                // Save config before exit
                 let _ = self.config.save();
                 window::close(window::Id::unique())
             }
@@ -331,18 +378,28 @@ impl ContainerManagerApp {
     pub fn view(&self) -> Element<'_, Message> {
         let theme = &self.theme;
         
-        // Header with title and stats
-        let stats = widget::row![
-            widgets::stats_badge("Containers".to_string(), self.containers.len().to_string(), theme.background, theme.primary, theme.text, theme.text_muted),
-            widgets::stats_badge("Running".to_string(), self.containers.iter().filter(|c| c.state == ContainerState::Running).count().to_string(), theme.background, theme.primary, theme.text, theme.text_muted),
-            widgets::stats_badge("Stopped".to_string(), self.containers.iter().filter(|c| c.state == ContainerState::Exited).count().to_string(), theme.background, theme.primary, theme.text, theme.text_muted),
-        ]
-        .spacing(12);
+        // Main content based on mode
+        if let Some(container_id) = &self.logs_container {
+            self.logs_view(container_id, theme)
+        } else if self.show_settings {
+            self.main_view(theme)
+        } else {
+            self.main_view(theme)
+        }
+    }
+    
+    fn main_view<'a>(&'a self, theme: &'a AppTheme) -> Element<'a, Message> {
+        // Header with stats
+        let running_count = self.containers.iter().filter(|c| c.state == ContainerState::Running).count();
+        let stopped_count = self.containers.iter().filter(|c| c.state == ContainerState::Exited).count();
         
         let header = widget::row![
-            widget::text("Krabby Container").size(28).color(theme.primary).font(iced::Font::DEFAULT),
+            widget::column![
+                widget::text("Krabby Container").size(32).color(theme.primary).font(iced::Font::DEFAULT),
+                widget::text("Container Management").size(12).color(theme.text_muted),
+            ],
             widget::Space::with_width(Length::Fill),
-            stats,
+            widgets::stats_row(running_count, stopped_count, self.containers.len(), theme),
         ]
         .spacing(24)
         .align_y(Alignment::Center);
@@ -350,7 +407,7 @@ impl ContainerManagerApp {
         // Toolbar
         let search_input = widget::text_input("Search containers...", &self.search_query)
             .on_input(Message::SearchChanged)
-            .padding(12)
+            .padding(10)
             .width(Length::Fixed(280.0));
         
         let filter_dropdown = widget::pick_list(
@@ -359,122 +416,175 @@ impl ContainerManagerApp {
             Message::StateFilterChanged,
         )
         .placeholder("All States")
-        .width(Length::Fixed(140.0));
+        .width(Length::Fixed(130.0));
         
-        let refresh_btn = widgets::styled_button("Refresh", theme).on_press(Message::RefreshContainers);
-        let export_csv_btn = widgets::styled_button_secondary("CSV", theme).on_press(Message::ExportCsv);
-        let export_json_btn = widgets::styled_button_secondary("JSON", theme).on_press(Message::ExportJson);
-        let compose_btn = widgets::styled_button_secondary("Compose", theme).on_press(Message::GenerateCompose);
-        let settings_btn = widgets::styled_button_secondary("Settings", theme).on_press(Message::ToggleSettings);
+        let refresh_btn = widgets::icon_button("↻", "Refresh", theme)
+            .on_press(Message::RefreshContainers);
+        let export_btn = widgets::icon_button("⬇", "Export", theme)
+            .on_press(Message::ExportCsv);
+        let settings_btn = widgets::icon_button("⚙", "Settings", theme)
+            .on_press(Message::ToggleSettings);
         
         let toolbar = widget::row![
             search_input,
             filter_dropdown,
             widget::Space::with_width(Length::Fill),
             refresh_btn,
-            export_csv_btn,
-            export_json_btn,
-            compose_btn,
+            export_btn,
             settings_btn,
         ]
-        .spacing(12)
+        .spacing(10)
         .align_y(Alignment::Center);
         
-        // Container list
-        let mut container_list = widget::Column::with_capacity(self.filtered_containers.len() + 1);
-        container_list = container_list.push(widgets::header_row(theme));
-        
-        for container in &self.filtered_containers {
-            let id = container.id.clone();
-            container_list = container_list.push(
-                widgets::container_row(
+        // Container table
+        let container_table: Element<_> = if self.filtered_containers.is_empty() {
+            widget::container(
+                widget::column![
+                    widget::Space::with_height(Length::Fixed(100.0)),
+                    widget::text("No containers found").size(18).color(theme.text_muted),
+                    widget::text("Try adjusting your search or filters").size(12).color(theme.text_muted),
+                ]
+                .align_x(Alignment::Center)
+            )
+            .center(Length::Fill)
+            .into()
+        } else {
+            let mut table = widget::Column::new();
+            
+            // Header row
+            table = table.push(widgets::table_header(theme));
+            
+            // Container rows
+            for container in &self.filtered_containers {
+                table = table.push(widgets::container_row(
                     container,
                     theme,
-                    Message::StartContainer(id.clone()),
-                    Message::StopContainer(id.clone()),
-                    Message::RestartContainer(id.clone()),
-                    Message::RemoveContainer(id.clone()),
-                )
-            );
-        }
-        
-        let scrollable = widget::scrollable(container_list.spacing(8))
-            .height(Length::Fill)
-            .style(|_t, _s| theme.scrollable_style());
-        
-        // Status messages
-        let status_bar = if let Some(error) = &self.error_message {
-            widget::container(widget::text(error).size(12).color(theme.error))
-                .padding([8, 16])
-                .style(|_t| {
-                    iced::widget::container::Style {
-                        background: Some(iced::Background::Color(theme.error.scale_alpha(0.1))),
-                        border: iced::Border {
-                            radius: 8.0.into(),
-                            width: 1.0,
-                            color: theme.error.scale_alpha(0.3),
-                        },
-                        ..Default::default()
-                    }
-                })
+                    Message::StartContainer(container.id.clone()),
+                    Message::StopContainer(container.id.clone()),
+                    Message::RestartContainer(container.id.clone()),
+                    Message::RemoveContainer(container.id.clone()),
+                    Message::ViewLogs(container.id.clone()),
+                ));
+            }
+            
+            widget::scrollable(table.spacing(2))
+                .height(Length::Fill)
+                .style(|_t, _s| theme.scrollable_style())
                 .into()
-        } else if let Some(success) = &self.success_message {
-            widget::container(widget::text(success).size(12).color(theme.success))
-                .padding([8, 16])
-                .style(|_t| {
-                    iced::widget::container::Style {
-                        background: Some(iced::Background::Color(theme.success.scale_alpha(0.1))),
-                        border: iced::Border {
-                            radius: 8.0.into(),
-                            width: 1.0,
-                            color: theme.success.scale_alpha(0.3),
-                        },
-                        ..Default::default()
-                    }
-                })
-                .into()
-        } else {
-            Element::from(widget::Space::with_height(Length::Fixed(0.0)))
         };
         
-        // Settings panel (if shown)
-        let main_content: Element<_> = if self.show_settings {
-            widget::column![
-                header,
-                toolbar,
-                self.settings_view(),
-                status_bar,
-            ]
-            .spacing(16)
-            .padding(24)
-            .into()
-        } else {
-            widget::column![
-                header,
-                toolbar,
-                scrollable,
-                status_bar,
-            ]
-            .spacing(16)
-            .padding(24)
-            .into()
-        };
+        // Status bar
+        let status_bar = self.status_bar(theme);
         
-        widget::container(main_content)
+        // Main content
+        let content = widget::column![
+            header,
+            toolbar,
+            container_table,
+            status_bar,
+        ]
+        .spacing(16)
+        .padding(20);
+        
+        widget::container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(|_t| {
-                iced::widget::container::Style {
-                    background: Some(iced::Background::Color(theme.background)),
-                    ..Default::default()
-                }
-            })
+            .style(|_t| theme.main_container_style())
+            .into()
+    }
+    
+    fn logs_view<'a>(&'a self, container_id: &'a str, theme: &'a AppTheme) -> Element<'a, Message> {
+        let container = self.containers.iter().find(|c| c.id == container_id);
+        let container_name = container.map(|c| c.name.clone()).unwrap_or_else(|| container_id[..12].to_string());
+        
+        // Header
+        let header = widget::row![
+            widget::text(format!("Logs: {}", container_name))
+                .size(20)
+                .color(theme.text),
+            widget::Space::with_width(Length::Fill),
+            widgets::styled_button("Close", theme).on_press(Message::CloseLogs),
+        ]
+        .align_y(Alignment::Center);
+        
+        // Logs content
+        let logs_content: Element<_> = if self.logs_loading {
+            widget::container(
+                widget::text("Loading logs...").color(theme.text_muted)
+            )
+            .center(Length::Fill)
+            .into()
+        } else if let Some(logs) = &self.logs_content {
+            widget::container(
+                widget::scrollable(
+                    widget::text(logs)
+                        .size(11)
+                        .font(iced::Font::MONOSPACE)
+                        .color(theme.text)
+                )
+                .height(Length::Fill)
+            )
+            .padding(10)
+            .style(|_t| theme.logs_container_style())
+            .into()
+        } else {
+            widget::container(
+                widget::text("No logs available").color(theme.text_muted)
+            )
+            .center(Length::Fill)
+            .into()
+        };
+        
+        let content = widget::column![
+            header,
+            logs_content,
+        ]
+        .spacing(12)
+        .padding(20);
+        
+        widget::container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_t| theme.main_container_style())
+            .into()
+    }
+    
+    fn status_bar<'a>(&'a self, theme: &'a AppTheme) -> Element<'a, Message> {
+        let status = if let Some(error) = &self.error_message {
+            widget::row![
+                widget::text("●").color(theme.error),
+                widget::text(error).size(12).color(theme.error),
+            ]
+            .spacing(8)
+        } else if let Some(success) = &self.success_message {
+            widget::row![
+                widget::text("●").color(theme.success),
+                widget::text(success).size(12).color(theme.success),
+            ]
+            .spacing(8)
+        } else {
+            let refresh_ago = self.last_refresh.elapsed().as_secs();
+            let time_text = if refresh_ago < 60 {
+                format!("Updated {}s ago", refresh_ago)
+            } else {
+                format!("Updated {}m ago", refresh_ago / 60)
+            };
+            widget::row![
+                widget::text("●").color(theme.success),
+                widget::text(time_text).size(12).color(theme.text_muted),
+            ]
+            .spacing(8)
+        };
+        
+        widget::container(status)
+            .padding([8, 12])
+            .style(|_t| theme.status_bar_style())
             .into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        // Auto-refresh subscription
-        iced::time::every(Duration::from_secs(self.config.auto_refresh_interval)).map(|_| Message::Tick)
+        iced::time::every(Duration::from_secs(self.config.auto_refresh_interval))
+            .map(|_| Message::Tick)
     }
 
     pub fn theme(&self) -> Theme {
@@ -488,34 +598,4 @@ enum Action {
     Stop,
     Restart,
     Remove,
-}
-
-impl ContainerManagerApp {
-    fn settings_view(&self) -> Element<'_, Message> {
-        let theme = &self.theme;
-        
-        let theme_section = widget::column![
-            widget::text("Appearance").size(18).color(theme.text),
-            widget::row![
-                widgets::styled_button("Midnight", theme).on_press(Message::ChangeTheme("midnight".to_string())),
-                widgets::styled_button("Ocean", theme).on_press(Message::ChangeTheme("ocean".to_string())),
-                widgets::styled_button("Forest", theme).on_press(Message::ChangeTheme("forest".to_string())),
-                widgets::styled_button("Rose", theme).on_press(Message::ChangeTheme("rose".to_string())),
-                widgets::styled_button("Amber", theme).on_press(Message::ChangeTheme("amber".to_string())),
-            ]
-            .spacing(8),
-        ]
-        .spacing(12);
-        
-        widget::container(
-            widget::column![
-                widget::text("Settings").size(24).color(theme.primary),
-                theme_section,
-            ]
-            .spacing(24)
-        )
-        .padding(24)
-        .style(|_t| theme.container_style())
-        .into()
-    }
 }
