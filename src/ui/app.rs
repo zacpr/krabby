@@ -4,6 +4,7 @@ use iced::{
     Alignment, Element, Length, Subscription, Theme, 
 };
 
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -44,6 +45,7 @@ pub enum Message {
     
     ShowWindow,
     HideWindow,
+    CloseRequested(window::Id),
     Exit,
     
     Tick,
@@ -357,13 +359,14 @@ impl ContainerManagerApp {
                 Task::none()
             }
             
-            Message::ShowWindow => {
-                window::get_latest().and_then(|id| window::gain_focus(id))
-            }
+            // These are handled by the wrapper update in main.rs
+            // They should never reach here, but just in case:
+            Message::ShowWindow => Task::none(),
             Message::HideWindow => Task::none(),
+            Message::CloseRequested(_) => Task::none(),
             Message::Exit => {
                 let _ = self.config.save();
-                window::close(window::Id::unique())
+                Task::none()
             }
             
             Message::Tick => {
