@@ -1,6 +1,6 @@
 [package]
 name = "krabby"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
 authors = ["Krabby Team"]
 description = "A modern, beautiful container management utility for Linux"
