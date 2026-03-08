@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+Cargo.lock
+*.rpm
+krabby-*.rpm
+rusty_containers-*.rpm
+dist/

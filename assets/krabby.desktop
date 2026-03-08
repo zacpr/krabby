@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Krabby Container
+Comment=A modern, beautiful container management utility for Linux
+Exec=krabby
+Icon=krabby
+Type=Application
+Categories=System;Development;
+Keywords=docker;containers;podman;gui;
+Terminal=false
+StartupNotify=true

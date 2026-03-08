@@ -1,0 +1,142 @@
+[package]
+name = "krabby"
+version = "0.1.0"
+edition = "2024"
+authors = ["Krabby Team"]
+description = "A modern, beautiful container management utility for Linux"
+license = "MIT"
+repository = "https://github.com/user/krabby"
+readme = "README.md"
+homepage = "https://github.com/user/krabby"
+keywords = ["docker", "containers", "gui", "system-tray", "linux"]
+categories = ["gui", "development-tools"]
+rust-version = "1.85"
+
+[dependencies]
+# GUI Framework - using tiny-skia software renderer for better compatibility
+iced = { version = "0.13", default-features = false, features = ["tokio", "svg", "image", "tiny-skia"] }
+
+# System Tray - using ksni for better KDE/Wayland support
+ksni = { version = "0.2", optional = true }
+
+# Docker API
+bollard = { version = "0.18", features = ["ssl"] }
+
+# Async Runtime
+tokio = { version = "1.43", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+serde_yaml = "0.9"
+
+# Configuration & Directories
+dirs = "6.0"
+
+# CSV Export
+csv = "1.3"
+
+# Error Handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP Client for registry checks
+reqwest = { version = "0.12", features = ["json"] }
+
+# Notifications
+notify-rust = "4.11"
+
+# Image processing for icons
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+
+# Single instance enforcement
+single-instance = "0.3"
+lazy_static = "1.5.0"
+gtk = { version = "0.18.2", features = ["v3_24"], optional = true }
+
+[features]
+default = ["tray"]
+tray = ["dep:ksni"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[package.metadata.rpm]
+package = "krabby"
+
+[package.metadata.rpm.cargo]
+buildflags = ["--release"]
+
+[package.metadata.rpm.targets]
+krabby = { path = "/usr/bin/krabby" }
+
+[package.metadata.generate-rpm]
+name = "krabby"
+version = "0.1.0"
+license = "MIT"
+edition = "2024"
+summary = "A modern, beautiful container management utility for Linux"
+url = "https://github.com/user/krabby"
+
+[package.metadata.generate-rpm.requires]
+gtk3 = "*"
+# Docker is required but we don't specify which variant
+# Supports: docker (moby-engine), docker-ce, docker-ce-cli, podman-docker
+
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/krabby"
+dest = "/usr/bin/krabby"
+mode = "0755"
+
+[[package.metadata.generate-rpm.assets]]
+source = "assets/krabby.desktop"
+dest = "/usr/share/applications/krabby.desktop"
+mode = "0644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "assets/logo.svg"
+dest = "/usr/share/icons/hicolor/scalable/apps/krabby.svg"
+mode = "0644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "README.md"
+dest = "/usr/share/doc/krabby/README.md"
+mode = "0644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "LICENSE"
+dest = "/usr/share/licenses/krabby/LICENSE"
+mode = "0644"
+
+# Debian package metadata
+[package.metadata.deb]
+name = "krabby"
+license-file = ["LICENSE", "4"]
+extended-description = """A modern, beautiful container management utility for Linux.
+Supports Docker and Podman containers with a clean, intuitive interface."""
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/krabby", "usr/bin/krabby", "755"],
+    ["assets/krabby.desktop", "usr/share/applications/krabby.desktop", "644"],
+    ["assets/logo.svg", "usr/share/icons/hicolor/scalable/apps/krabby.svg", "644"],
+    ["README.md", "usr/share/doc/krabby/README.md", "644"],
+]
+depends = "$auto, libgtk-3-0, libdbus-1-3"
