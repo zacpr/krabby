@@ -399,7 +399,12 @@ impl ContainerManagerApp {
         
         let header = widget::row![
             widget::column![
-                widget::text("Krabby Container").size(32).color(theme.primary).font(iced::Font::DEFAULT),
+                widget::row![
+                    widget::text("Krabby Container").size(32).color(theme.primary).font(iced::Font::DEFAULT),
+                    widget::text(format!("v{}", env!("CARGO_PKG_VERSION"))).size(14).color(theme.text_muted),
+                ]
+                .spacing(8)
+                .align_y(Alignment::End),
                 widget::text("Container Management").size(12).color(theme.text_muted),
             ],
             widget::Space::with_width(Length::Fill),
