@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use iced::{
     border::Radius,
     theme::{Custom, Palette},

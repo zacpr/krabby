@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -109,7 +110,7 @@ impl AppConfig {
     }
 }
 
-pub const THEMES: &[(&str, &str, &str, &str)] = &[
+pub const THEMES: &[(&str, &str, &str, &str); 5] = &[
     ("midnight", "#0f0f23", "#e2e8f0", "#7c3aed"),
     ("ocean", "#0c4a6e", "#e0f2fe", "#0ea5e9"),
     ("forest", "#064e3b", "#d1fae5", "#10b981"),

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use iced::{
     widget, 
     window, Task, 

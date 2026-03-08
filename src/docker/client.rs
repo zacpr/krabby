@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use bollard::container::{ListContainersOptions, StartContainerOptions, StopContainerOptions, RestartContainerOptions, RemoveContainerOptions, StatsOptions, Stats};
 use bollard::models::ContainerSummary;
 use bollard::Docker;
