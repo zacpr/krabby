@@ -249,10 +249,8 @@ fn update(app: &mut ContainerManagerApp, message: Message) -> Task<Message> {
             });
         }
         Message::Exit => {
-            // Actually quit the application - close all windows
-            return window::get_latest().and_then(|id| {
-                window::close(id)
-            });
+            // Actually quit the application
+            std::process::exit(0);
         }
         _ => {}
     }
