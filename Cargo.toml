@@ -1,11 +1,11 @@
 [package]
 name = "krabby"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Krabby Team"]
 description = "A modern, beautiful container management utility for Linux"
 license = "MIT"
-repository = "https://github.com/user/krabby"
+repository = "https://github.com/zacpr/krabby"
 readme = "README.md"
 homepage = "https://github.com/user/krabby"
 keywords = ["docker", "containers", "gui", "system-tray", "linux"]
