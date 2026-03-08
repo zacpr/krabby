@@ -422,11 +422,11 @@ impl ContainerManagerApp {
         .placeholder("All States")
         .width(Length::Fixed(130.0));
         
-        let refresh_btn = widgets::icon_button("↻", "Refresh", theme)
+        let refresh_btn = widgets::icon_button("\u{F116}", "Refresh", theme) // arrow-clockwise
             .on_press(Message::RefreshContainers);
-        let export_btn = widgets::icon_button("⬇", "Export", theme)
+        let export_btn = widgets::icon_button("\u{F30A}", "Export", theme) // download
             .on_press(Message::ExportCsv);
-        let settings_btn = widgets::icon_button("⚙", "Settings", theme)
+        let settings_btn = widgets::icon_button("\u{F3E2}", "Settings", theme) // gear-fill
             .on_press(Message::ToggleSettings);
         
         let toolbar = widget::row![

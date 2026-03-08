@@ -137,18 +137,18 @@ pub fn container_row<'a>(
     let action_buttons: Element<_> = match container.state {
         ContainerState::Running => {
             widget::row![
-                icon_button_small("📋", "Logs", theme).on_press(on_logs),
-                icon_button_small("⏸", "Stop", theme).on_press(on_stop),
-                icon_button_small("↻", "Restart", theme).on_press(on_restart),
+                icon_button_small("\u{F290}", "Logs", theme).on_press(on_logs),      // clipboard
+                icon_button_small("\u{F4C3}", "Stop", theme).on_press(on_stop),      // pause-fill
+                icon_button_small("\u{F116}", "Restart", theme).on_press(on_restart),// arrow-clockwise
             ]
             .spacing(4)
             .into()
         }
         _ => {
             widget::row![
-                icon_button_small("📋", "Logs", theme).on_press(on_logs),
-                icon_button_small("▶", "Start", theme).on_press(on_start),
-                icon_button_small("🗑", "Remove", theme).on_press(on_remove),
+                icon_button_small("\u{F290}", "Logs", theme).on_press(on_logs),      // clipboard
+                icon_button_small("\u{F4F4}", "Start", theme).on_press(on_start),    // play-fill
+                icon_button_small("\u{F5DD}", "Remove", theme).on_press(on_remove),  // trash-fill
             ]
             .spacing(4)
             .into()
@@ -210,10 +210,12 @@ pub fn styled_button<'a>(label: &'a str, theme: &'a AppTheme) -> widget::Button<
         })
 }
 
+pub const ICONS: iced::Font = iced::Font::with_name("bootstrap-icons");
+
 /// Small icon button for table actions
 pub fn icon_button_small<'a>(icon: &'a str, _tooltip: &'a str, theme: &'a AppTheme) -> widget::Button<'a, Message> {
     widget::button(
-        widget::text(icon).size(12)
+        widget::text(icon).font(ICONS).size(14)
     )
     .width(Length::Fixed(32.0))
     .height(Length::Fixed(28.0))
@@ -241,10 +243,10 @@ pub fn icon_button_small<'a>(icon: &'a str, _tooltip: &'a str, theme: &'a AppThe
 pub fn icon_button<'a>(icon: &'a str, label: &'a str, _theme: &'a AppTheme) -> widget::Button<'a, Message> {
     widget::button(
         widget::row![
-            widget::text(icon).size(14),
-            widget::text(label).size(12),
+            widget::text(icon).font(ICONS).size(16),
+            widget::text(label).size(13),
         ]
-        .spacing(6)
+        .spacing(8)
         .align_y(Alignment::Center)
     )
     .padding([8, 14])

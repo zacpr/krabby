@@ -59,6 +59,7 @@ fn main() -> iced::Result {
         update,
         ContainerManagerApp::view,
     )
+    .font(include_bytes!("bootstrap-icons.ttf").as_slice())
     .subscription(subscription)
     .theme(ContainerManagerApp::theme)
     .window(window::Settings {
