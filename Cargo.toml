@@ -1,6 +1,6 @@
 [package]
 name = "krabby"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 authors = ["Krabby Team"]
 description = "A modern, beautiful container management utility for Linux"
@@ -89,9 +89,7 @@ krabby = { path = "/usr/bin/krabby" }
 
 [package.metadata.generate-rpm]
 name = "krabby"
-version = "0.1.0"
 license = "MIT"
-edition = "2024"
 summary = "A modern, beautiful container management utility for Linux"
 url = "https://github.com/user/krabby"
 
